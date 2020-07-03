@@ -7,11 +7,11 @@ using System.Windows;
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("CleanedTreatmentsDetailsImportGUI")]
+[assembly: AssemblyTitle("DataImportToDB")]
 [assembly: AssemblyDescription("Утилита для загрузки очищенной детализации по приемам в БД")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("ООО Клиника ЛМС")]
-[assembly: AssemblyProduct("CleanedTreatmentsDetailsImportGUI")]
+[assembly: AssemblyProduct("DataImportToDB")]
 [assembly: AssemblyCopyright("nn-admin  ©  2020")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]

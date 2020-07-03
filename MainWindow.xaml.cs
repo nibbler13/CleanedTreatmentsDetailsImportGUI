@@ -13,8 +13,9 @@ using System.Data;
 using System.IO;
 using System.Threading;
 using System.Windows.Threading;
+using System.Windows.Documents;
 
-namespace CleanedTreatmentsDetailsImportGUI {
+namespace DataImportToDB {
 	/// <summary>
 	/// Interaction logic for MainWindow.xaml
 	/// </summary>
@@ -97,7 +98,7 @@ namespace CleanedTreatmentsDetailsImportGUI {
 
 		private string selectedFile;
 		public string SelectedFile { 
-			get { return selectedFile; }
+			get { return string.IsNullOrEmpty(selectedFile) ? string.Empty : Path.GetFileName(selectedFile); }
 			set {
 				if (value != selectedFile) {
 					selectedFile = value;
@@ -156,6 +157,60 @@ namespace CleanedTreatmentsDetailsImportGUI {
 		}
 
 
+		private bool isCheckedloadTypeTreatmentsDetails;
+		public bool IsCheckedLoadTypeTreatmentsDetails {
+			get { return isCheckedloadTypeTreatmentsDetails; }
+			set {
+				if (value != isCheckedloadTypeTreatmentsDetails) {
+					isCheckedloadTypeTreatmentsDetails = value;
+					NotifyPropertyChanged();
+					SetUpVisibilityForLoadType();
+				}
+			}
+		}
+
+		private bool isCheckedloadTypeProfitAndLoss;
+		public bool IsCheckedLoadTypeProfitAndLoss {
+			get { return isCheckedloadTypeProfitAndLoss; }
+			set {
+				if (value != isCheckedloadTypeProfitAndLoss) {
+					isCheckedloadTypeProfitAndLoss = value;
+					NotifyPropertyChanged();
+					SetUpVisibilityForLoadType();
+				}
+			}
+		}
+
+		private void SetUpVisibilityForLoadType() {
+			VisibilityInsuranceCompanyComboBox = IsCheckedLoadTypeTreatmentsDetails ? Visibility.Visible : Visibility.Collapsed;
+			VisibilityPeriodGroupBox = IsCheckedLoadTypeTreatmentsDetails ? Visibility.Visible : Visibility.Collapsed;
+		}
+
+
+		private Visibility visibilityInsuranceCompanyComboBox;
+		public Visibility VisibilityInsuranceCompanyComboBox {
+			get { return visibilityInsuranceCompanyComboBox; }
+			set {
+				if (value != visibilityInsuranceCompanyComboBox) {
+					visibilityInsuranceCompanyComboBox = value;
+					NotifyPropertyChanged();
+				}
+			}
+		}
+
+
+		private Visibility visibilityPeriodGroupBox;
+		public Visibility VisibilityPeriodGroupBox {
+			get { return visibilityPeriodGroupBox; }
+			set {
+				if (value != visibilityPeriodGroupBox) {
+					visibilityPeriodGroupBox = value;
+					NotifyPropertyChanged();
+				}
+			}
+		}
+
+
 
 
 		public MainWindow() {
@@ -165,15 +220,15 @@ namespace CleanedTreatmentsDetailsImportGUI {
 			DateBegin = DateTime.Now.Date.AddDays(DateTime.Now.Day * -1);
 			DateEnd = DateBegin;
 			DateBegin = DateBegin.AddDays((DateBegin.Day - 1) * -1);
+			IsCheckedLoadTypeTreatmentsDetails = true;
 
 			DataContext = this;
 
 			Loaded += (s, e) => {
 				if (Debugger.IsAttached) {
-					SelectedFile = @"C:\Users\nn-admin\Desktop\Абсолют апрель 2020_замена+.xlsx";
-					SelectedSheetName = "Лист1";
+					SelectedFile = @"C:\Users\nn-admin\Desktop\PL шаблон.xlsx";
+					IsCheckedLoadTypeProfitAndLoss = true;
 					ReadSheetNames();
-					SelectedInsuranceCompany = "АбсолютСтрахование";
 				}
 			};
 
@@ -229,7 +284,7 @@ namespace CleanedTreatmentsDetailsImportGUI {
 			SelectedSheetName = string.Empty;
 
 			try {
-				ExcelReader.ReadSheetNames(SelectedFile).ForEach(SheetNames.Add);
+				ExcelReader.ReadSheetNames(selectedFile).ForEach(SheetNames.Add);
 
 				if (SheetNames.Count > 0) {
 					if (SheetNames.Contains("Лист1"))
@@ -252,16 +307,20 @@ namespace CleanedTreatmentsDetailsImportGUI {
 		private void ButtonReadSelectedFile_Click(object sender, RoutedEventArgs e) {
 			string error = string.Empty;
 
-			if (string.IsNullOrEmpty(SelectedFile))
+			if (string.IsNullOrEmpty(SelectedFile)) {
 				error = "Не выбран файл с данными";
-			else if (string.IsNullOrEmpty(SelectedInsuranceCompany))
-				error = "Не выбрана страховая компания";
-			else if (string.IsNullOrEmpty(SelectedSheetName))
+			} else if (string.IsNullOrEmpty(SelectedInsuranceCompany)) {
+				if (IsCheckedLoadTypeTreatmentsDetails)
+					error = "Не выбрана страховая компания";
+			} else if (string.IsNullOrEmpty(SelectedSheetName)) {
 				error = "Не выбран лист в файле";
-			else if (DateBegin > DateEnd)
-				error = "Дата начала периода больше даты окончания";
-			else if (DateBegin > DateTime.Now.Date)
-				error = "Дата начала периода больше текущего дня";
+			} else if (DateBegin > DateEnd) {
+				if (IsCheckedLoadTypeTreatmentsDetails)
+					error = "Дата начала периода больше даты окончания";
+			} else if (DateBegin > DateTime.Now.Date) {
+				if (IsCheckedLoadTypeTreatmentsDetails)
+					error = "Дата начала периода больше текущего дня";
+			}
 
 			if (!string.IsNullOrEmpty(error)) {
 				MessageBox.Show(
@@ -370,17 +429,35 @@ namespace CleanedTreatmentsDetailsImportGUI {
 			e.Result = false;
 
 			UpdateProgress("Считывание файла: " + SelectedFile + ", лист: " + SelectedSheetName);
-			string fileResult = Program.ReadFileContent(SelectedFile, SelectedSheetName, out fileInfo, sender as BackgroundWorker);
+			string fileResult;
+			if (IsCheckedLoadTypeTreatmentsDetails)
+				fileResult = Program.ReadTreatmentsDetailsFileContent(selectedFile, SelectedSheetName, out fileInfo, sender as BackgroundWorker);
+			else if (IsCheckedLoadTypeProfitAndLoss)
+				fileResult = Program.ReadProfitAndLossLFileContent(selectedFile, SelectedSheetName, out fileInfo, sender as BackgroundWorker);
+			else
+				fileResult = "Неизвестный тип импорта; ошибок: 1";
 
 			UpdateProgress(fileResult);
 			if (!fileResult.Contains("ошибок: 0")) {
 				UpdateProgress("!!! Имеются ошибки при считывании файла, продолжение невозможно");
+
+				if (!Debugger.IsAttached)
+					return;
+			}
+
+			int rowsReadedCount = 0;
+			if (IsCheckedLoadTypeTreatmentsDetails)
+				rowsReadedCount = Program.FileContentTreatmentsDetails.Rows.Count;
+			else if (IsCheckedLoadTypeProfitAndLoss)
+				rowsReadedCount = Program.FileContentProfitAndLoss.Count;
+
+			if (rowsReadedCount == 0) {
+				UpdateProgress("!!! Не удалось считать данные для записи в БД (пустой файл / несоответствие формата))");
 				return;
 			}
 
-			int rowsReadedCount = Program.FileContent.Rows.Count;
-			if (rowsReadedCount == 0) {
-				UpdateProgress("!!! Не удалось считать данные для записи в БД (пустой файл / несоответствие формата))");
+			if (IsCheckedLoadTypeProfitAndLoss) {
+				e.Result = true;
 				return;
 			}
 
@@ -394,7 +471,7 @@ namespace CleanedTreatmentsDetailsImportGUI {
 
 			UpdateProgress("Запрос данных по выбранной страховой за указанный период");
 			DataTable dataTableDb = verticaClient.GetDataTable(
-				VerticaSettings.sqlGetData.Replace("@jids", insuranceCompaniesJID[SelectedInsuranceCompany]),
+				VerticaSettings.sqlGetDataTreatmentsDetails.Replace("@jids", insuranceCompaniesJID[SelectedInsuranceCompany]),
 				new Dictionary<string, object> {
 					{ "@dateBegin", DateBegin },
 					{ "@dateEnd", DateEnd }
@@ -421,7 +498,7 @@ namespace CleanedTreatmentsDetailsImportGUI {
 				double serviceAmountLoaded = 0;
 				int rowCountLoaded = 0;
 
-				foreach (DataRow dataRow in Program.FileContent.Rows) {
+				foreach (DataRow dataRow in Program.FileContentTreatmentsDetails.Rows) {
 					string contract = dataRow["contract"].ToString();
 					if (string.IsNullOrEmpty(contract))
 						continue;
@@ -460,9 +537,13 @@ namespace CleanedTreatmentsDetailsImportGUI {
 					UpdateProgress("!!! Строк, загруженных ранее: " + rowsLoadedBefore + 
 						" - не допускается повторная загрузка данных, необходимо сначала удалить ранее загруженные данные");
 
-				if (rowsWithNoOrdtid > 0)
-					UpdateProgress("!!! Строк, для которых не удалось найти сопоставления в БД: " + rowsWithNoOrdtid + 
+				if (rowsWithNoOrdtid > 0) {
+					UpdateProgress("!!! Строк, для которых не удалось найти сопоставления в БД: " + rowsWithNoOrdtid +
 						" - не допускается загрузка данных, которые невозможно идентифицировать в БД");
+
+					if (Debugger.IsAttached)
+						isDataOk = true;
+				}
 
 				UpdateProgress("Для консультирования просьба обратиться в отдел поддержки бизнес-приложений");
 			}
@@ -572,11 +653,22 @@ namespace CleanedTreatmentsDetailsImportGUI {
 					VerticaSettings.password,
 					bw);
 
-				bool isOk = verticaClient.ExecuteUpdateQuery(VerticaSettings.sqlInsert, Program.FileContent, fileInfo);
+				bool isOk = false;
+				if (IsCheckedLoadTypeTreatmentsDetails)
+					isOk = verticaClient.ExecuteUpdateQuery(VerticaSettings.sqlInsertTreatmentsDetails, true, fileInfo);
+				else if (IsCheckedLoadTypeProfitAndLoss)
+					isOk = verticaClient.ExecuteUpdateQuery(VerticaSettings.sqlInsertProfitAndLoss, false, fileInfo);
+
 				if (isOk) {
 					bw.ReportProgress(0, "Данные успешно загружены в БД");
+
+					if (IsCheckedLoadTypeProfitAndLoss) {
+						e.Result = true;
+						return;
+					}
+
 					bw.ReportProgress(0, "Обновление данных в основной таблице с услугами (это может занять несколько минут). Дождитесь окончания.");
-					DataTable dataTableRefresh = verticaClient.GetDataTable(VerticaSettings.sqlRefresh);
+					DataTable dataTableRefresh = verticaClient.GetDataTable(VerticaSettings.sqlRefreshOrderdet);
 					if (dataTableRefresh != null) 
 						if (dataTableRefresh.Rows[0][0].ToString().Equals("refresh_columns completed")) {
 							bw.ReportProgress(0, "Обновление выполнено успешно");
