@@ -224,13 +224,13 @@ namespace DataImportToDB {
 
 			DataContext = this;
 
-			Loaded += (s, e) => {
-				if (Debugger.IsAttached) {
-					SelectedFile = @"C:\Users\nn-admin\Desktop\PL шаблон.xlsx";
-					IsCheckedLoadTypeProfitAndLoss = true;
-					ReadSheetNames();
-				}
-			};
+			//Loaded += (s, e) => {
+			//	if (Debugger.IsAttached) {
+			//		SelectedFile = @"C:\Users\nn-admin\Desktop\PL шаблон.xlsx";
+			//		IsCheckedLoadTypeProfitAndLoss = true;
+			//		ReadSheetNames();
+			//	}
+			//};
 
 			Closing += (s, e) => {
 				if ((bwReadFile != null && bwReadFile.IsBusy) ||
@@ -427,13 +427,14 @@ namespace DataImportToDB {
 
 		private void BwReadFile_DoWork(object sender, DoWorkEventArgs e) {
 			e.Result = false;
+			BackgroundWorker bw = sender as BackgroundWorker;
 
 			UpdateProgress("Считывание файла: " + SelectedFile + ", лист: " + SelectedSheetName);
 			string fileResult;
 			if (IsCheckedLoadTypeTreatmentsDetails)
-				fileResult = Program.ReadTreatmentsDetailsFileContent(selectedFile, SelectedSheetName, out fileInfo, sender as BackgroundWorker);
+				fileResult = Program.ReadTreatmentsDetailsFileContent(selectedFile, SelectedSheetName, out fileInfo, bw);
 			else if (IsCheckedLoadTypeProfitAndLoss)
-				fileResult = Program.ReadProfitAndLossLFileContent(selectedFile, SelectedSheetName, out fileInfo, sender as BackgroundWorker);
+				fileResult = Program.ReadProfitAndLossLFileContent(selectedFile, SelectedSheetName, out fileInfo, bw);
 			else
 				fileResult = "Неизвестный тип импорта; ошибок: 1";
 
@@ -467,11 +468,15 @@ namespace DataImportToDB {
 				VerticaSettings.database,
 				VerticaSettings.user,
 				VerticaSettings.password,
-				sender as BackgroundWorker);
+				bw);
 
 			UpdateProgress("Запрос данных по выбранной страховой за указанный период");
+			string sqlQuery = VerticaSettings.sqlGetDataTreatmentsDetails;
+			if (SelectedInsuranceCompany.Equals("Другие СК"))
+				sqlQuery = VerticaSettings.sqlGetDataTreatmentsDetailsOtherIc;
+
 			DataTable dataTableDb = verticaClient.GetDataTable(
-				VerticaSettings.sqlGetDataTreatmentsDetails.Replace("@jids", insuranceCompaniesJID[SelectedInsuranceCompany]),
+				sqlQuery.Replace("@jids", insuranceCompaniesJID[SelectedInsuranceCompany]),
 				new Dictionary<string, object> {
 					{ "@dateBegin", DateBegin },
 					{ "@dateEnd", DateEnd }
@@ -487,7 +492,10 @@ namespace DataImportToDB {
 			UpdateProgress(new string('-', 40));
 			UpdateProgress("Сверка данных между файлом Excel и БД");
 			bool isDataOk = Program.IsCompareReadedDataToDbOk(
-				dataTableDb, out int rowsToDelete, out int rowsLoadedBefore, out int rowsWithNoOrdtid,  sender as BackgroundWorker);
+				dataTableDb, out int rowsToDelete, out int rowsLoadedBefore, out int rowsWithNoOrdtid, bw);
+
+			UpdateProgress("Расчет и применение средней скидки для изначальных данных");
+			Program.ApplyAverageDiscount(dataTableDb, bw);
 
 			UpdateProgress(new string('=', 40));
 
@@ -667,34 +675,34 @@ namespace DataImportToDB {
 						return;
 					}
 
-					bw.ReportProgress(0, "Обновление данных в основной таблице с услугами (это может занять несколько минут). Дождитесь окончания.");
-					DataTable dataTableRefresh = verticaClient.GetDataTable(VerticaSettings.sqlRefreshOrderdet);
-					if (dataTableRefresh != null) 
-						if (dataTableRefresh.Rows[0][0].ToString().Equals("refresh_columns completed")) {
-							bw.ReportProgress(0, "Обновление выполнено успешно");
+					//bw.ReportProgress(0, "Обновление данных в основной таблице с услугами (это может занять несколько минут). Дождитесь окончания.");
+					//DataTable dataTableRefresh = verticaClient.GetDataTable(VerticaSettings.sqlRefreshOrderdet);
+					//if (dataTableRefresh != null) 
+					//	if (dataTableRefresh.Rows[0][0].ToString().Equals("refresh_columns completed")) {
+					//		bw.ReportProgress(0, "Обновление выполнено успешно");
 
-							bw.ReportProgress(0, "Копирование исходного файла в архив");
-							string pathArchive = Program.GetArchivePath(out string messageError);
-							if (string.IsNullOrEmpty(pathArchive)) {
-								bw.ReportProgress(0, "Не удалось получить доступ к папке архива: " + messageError);
-							} else {
-								try {
-									string fileName = Path.GetFileNameWithoutExtension(SelectedFile);
-									string fileExtension = Path.GetExtension(SelectedFile);
-									string archiveFilePath = Path.Combine(pathArchive, fileName + fileExtension);
+					//		bw.ReportProgress(0, "Копирование исходного файла в архив");
+					//		string pathArchive = Program.GetArchivePath(out string messageError);
+					//		if (string.IsNullOrEmpty(pathArchive)) {
+					//			bw.ReportProgress(0, "Не удалось получить доступ к папке архива: " + messageError);
+					//		} else {
+					//			try {
+					//				string fileName = Path.GetFileNameWithoutExtension(SelectedFile);
+					//				string fileExtension = Path.GetExtension(SelectedFile);
+					//				string archiveFilePath = Path.Combine(pathArchive, fileName + fileExtension);
 
-									if (File.Exists(archiveFilePath))
-										archiveFilePath = Path.Combine(pathArchive, fileName + "_" + DateTime.Now.ToString("yyyyMMddHHmmss") + fileExtension);
+					//				if (File.Exists(archiveFilePath))
+					//					archiveFilePath = Path.Combine(pathArchive, fileName + "_" + DateTime.Now.ToString("yyyyMMddHHmmss") + fileExtension);
 
-									File.Copy(SelectedFile, archiveFilePath);
-									bw.ReportProgress(0, "Файл " + fileName + fileExtension + " успешно скопирован в архив");
-									e.Result = true;
-								} catch (Exception excArch) {
-									bw.ReportProgress(0, "Не удалось скопировать файл: " + excArch.Message + Environment.NewLine
-										+ excArch.StackTrace);
-								}
-							}
-						}
+					//				File.Copy(SelectedFile, archiveFilePath);
+					//				bw.ReportProgress(0, "Файл " + fileName + fileExtension + " успешно скопирован в архив");
+					//				e.Result = true;
+					//			} catch (Exception excArch) {
+					//				bw.ReportProgress(0, "Не удалось скопировать файл: " + excArch.Message + Environment.NewLine
+					//					+ excArch.StackTrace);
+					//			}
+					//		}
+					//	}
 				} else
 					bw.ReportProgress(0, "!!! Во время загрузки возникли ошибки");
 			} catch (Exception exc) {
